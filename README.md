@@ -7,6 +7,8 @@ Dhruv Raizada Krishan: dhruvkrishan17@g.ucla.edu <br>
 Zhaowei Xu: johnx@g.ucla.edu <br>
 Vikram Puliyadi: vikram.puliyadi@gmail.com <br>
 
+Link to Logs For our Project: https://drive.google.com/drive/folders/16nO8kg-Fkaf9UwA66v6_udD3HEpOZJM8?usp=sharing <br>
+
 
 <---------------------Below are original course content-------------------------->
 
