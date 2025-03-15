@@ -496,8 +496,23 @@ class WindowedEMGDataset(torch.utils.data.Dataset):
         window_end = offset + self.window_length + self.right_padding
         window = self.session[window_start:window_end]
 
+
+        # ---- NEW: Subselect channels here ----
+        # Assume window is a structured array with fields "emg_left" and "emg_right"
+        # Each field has shape (T_window, 16). Here we select the first 8 channels.
+        desired_channels = list(range(16))
+        left = window[EMGSessionData.EMG_LEFT][:, desired_channels]   # shape: (T_window, 8)
+        right = window[EMGSessionData.EMG_RIGHT][:, desired_channels]  # shape: (T_window, 8)
+
+        subselected = {
+          EMGSessionData.EMG_LEFT: left,
+          EMGSessionData.EMG_RIGHT: right,
+          EMGSessionData.TIMESTAMPS: window[EMGSessionData.TIMESTAMPS]
+        }
+
         # Extract EMG tensor corresponding to the window.
-        emg = self.transform(window)
+        emg = self.transform(subselected)
+        # print("Selected EMG array shape:", emg.shape)
         assert torch.is_tensor(emg)
 
         # Extract labels corresponding to the original (un-padded) window.
