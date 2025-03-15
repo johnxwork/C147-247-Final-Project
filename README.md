@@ -1,7 +1,7 @@
 # C147/247 Final Project
-### Winter 2025 - _Professor Jonathan Kao_
+### Winter 2025 - _Professor Jonathan Kao_ <br>
 
-This is the final project of UCLA EC ENGR 147/247 forked from the instructors and modified by the following students:
+This is the final project of UCLA EC ENGR 147/247 forked from the instructors and modified by the following students: <br>
 Saienath Poopalarajah: spoopalarajah@g.ucla.edu
 Dhruv Raizada Krishan: dhruvkrishan17@g.ucla.edu
 Zhaowei Xu: johnx@g.ucla.edu
