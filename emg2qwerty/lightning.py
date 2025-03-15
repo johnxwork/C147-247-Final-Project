@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from torch import gru, nn
+from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 from torchmetrics import MetricCollection
 
@@ -24,10 +24,11 @@ from emg2qwerty.metrics import CharacterErrorRates
 from emg2qwerty.modules import (
     MultiBandRotationInvariantMLP,
     SpectrogramNorm,
+    TDSConvEncoder,
+    TDSLSTMEncoder,
+    TDSBatchNorm1dBlock,
     PositionalEncoding,
     TransformerModel,
-    TDSConvEncoder,
-    TDSGRUEncoder,
 )
 from emg2qwerty.transforms import Transform
 
@@ -173,36 +174,55 @@ class TDSConvCTCModule(pl.LightningModule):
             # (T, N, num_features)
             nn.Flatten(start_dim=2),
 
-            # PositionalEncoding and Transformer are bundled.
-            # Turn off PE and Transformer when experimenting with GRU
-            # or other RNN layers.
-            # (T, N, num_features)
-            PositionalEncoding(d_embed = num_features),
-            # (T, N, num_features)
-            TransformerModel(
-                d_model = num_features,
-                nhead = 8,
-                dim_feedforward = num_features * 4,
-                num_layers = 6,
-                activation = 'relu',
-                layer_norm_eps = 1e-3,
-                batch_first = False,
-                norm_first = True,
-                bias = True,
+            TDSConvEncoder(
+                num_features=num_features,
+                block_channels=block_channels,
+                kernel_width=kernel_width,
+                eps = 1e-4,
+                momentum = 0.95,
+                affine = True,
+                track_running_stats = True,
             ),
 
-            # Turn on to enable basic TDSConvEncoder.
-            # TDSConvEncoder(
-            #     num_features=num_features,
-            #     block_channels=block_channels,
-            #     kernel_width=kernel_width,
-            # ),
+            TDSBatchNorm1dBlock(
+                num_features=num_features,                
+                eps = 1e-4,
+                momentum = 0.95,
+                affine = True,
+                track_running_stats = True,              
+            ),
+            TDSLSTMEncoder(
+              num_features=num_features,
+              lstm_hidden_size = 128,
+              num_lstm_layers = 4,
+              dropout = 0,
+            ),
 
-            # Turn on for experiments with GRU layer.
+            # Uncomment for experiments with GRU layer.
             # TDSGRUEncoder(
             #   num_features=num_features,
             #   lstm_hidden_size = 128,
             #   num_lstm_layers = 4,
+            # ),
+
+            # PositionalEncoding and Transformer are bundled.
+            # Turn off PE and Transformer when experimenting with GRU
+            # or other RNN layers.
+
+            # (T, N, num_features)
+            # PositionalEncoding(d_embed = num_features),
+
+            # (T, N, num_features)
+            # TransformerModel(
+            #     d_model = num_features,
+            #     nhead = 8,
+            #     dim_feedforward = num_features * 4,
+            #     num_layers = 6,
+            #     activation = 'relu',
+            #     layer_norm_eps = 1e-3,
+            #     batch_first = False,
+            #     norm_first = True,
+            #     bias = True,
             # ),
 
             # (T, N, num_classes)
@@ -226,13 +246,7 @@ class TDSConvCTCModule(pl.LightningModule):
         )
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        # This is only for transformer. simply return self.model(inputs)
-        # for other RNN experiments.
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        inputs = inputs.to(device)
-        self.model.to(device)
-        output = self.model(inputs)
-        return output
+        return self.model(inputs)
 
     def _step(
         self, phase: str, batch: dict[str, torch.Tensor], *args, **kwargs
