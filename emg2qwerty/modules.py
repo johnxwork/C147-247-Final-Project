@@ -353,7 +353,7 @@ class TransformerModel(nn.Module):
         return out
 
 
-# class TDSLSTMEncoder(nn.Module):
+# Class below used for LSTM and GRU, both implementations down below ; GRU commented out
 class TDSGRUEncoder(nn.Module):
 
     def __init__(
