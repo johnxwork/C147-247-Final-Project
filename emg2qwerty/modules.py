@@ -7,8 +7,7 @@
 from collections.abc import Sequence
 
 import torch
-from torch import nn
-import math
+from torch import gru, nn
 
 
 class SpectrogramNorm(nn.Module):
@@ -35,10 +34,7 @@ class SpectrogramNorm(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         T, N, bands, C, freq = inputs.shape  # (T, N, bands=2, C=16, freq)
-        # Transformer
         assert self.channels == bands * C
-        # RNN
-        # assert self.channels == bands * C, f"Mismatch in channels: expected {self.channels} (NUM_BANDS * ELECTRODE_CHANNELS), but got {bands * C} (bands: {bands}, electrode channels: {C})."
 
         x = inputs.movedim(0, -1)  # (N, bands=2, C=16, freq, T)
         x = x.reshape(N, bands * C, freq, T)
@@ -263,6 +259,10 @@ class TDSConvEncoder(nn.Module):
         num_features: int,
         block_channels: Sequence[int] = (24, 24, 24, 24),
         kernel_width: int = 32,
+        eps: float = 1e-3, 
+        momentum: float=0.85,
+        affine: bool=True,
+        track_running_stats: bool=True
     ) -> None:
         super().__init__()
 
@@ -275,6 +275,8 @@ class TDSConvEncoder(nn.Module):
             tds_conv_blocks.extend(
                 [
                     TDSConv2dBlock(channels, num_features // channels, kernel_width),
+                    TDSBatchNorm1dBlock(num_features = num_features, eps = eps, momentum = momentum, 
+                                        affine = affine, track_running_stats = track_running_stats),
                     TDSFullyConnectedBlock(num_features),
                 ]
             )
@@ -283,22 +285,101 @@ class TDSConvEncoder(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.tds_conv_blocks(inputs)  # (T, N, num_features)
 
+class TDSLSTMEncoder(nn.Module):
+    def __init__(
+        self,
+        num_features: int,
+        lstm_hidden_size: int = 128,
+        num_lstm_layers: int = 4,
+        dropout: float = 0.5,
+    ) -> None:
+        super().__init__()
+
+        self.lstm_layers = nn.LSTM(
+            input_size=num_features,
+            hidden_size=lstm_hidden_size,
+            num_layers=num_lstm_layers,
+            batch_first=False,  # Input shape: (T, N, num_features)
+            dropout = dropout,
+            bidirectional=True
+        )
+
+        # Fully connected block (remains the same)
+        self.fc_block = TDSFullyConnectedBlock(lstm_hidden_size * 2)
+        self.out_layer = nn.Linear(lstm_hidden_size * 2, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        x, _ = self.lstm_layers(inputs)  # (T, N, lstm_hidden_size * 2)
+        x = self.fc_block(x)  # Apply FC transformation
+        x = self.out_layer(x)
+        return x
+
+
+class TDSGRUEncoder(nn.Module):
+    def __init__(
+        self,
+        num_features: int,
+        gru_hidden_size: int = 128, 
+        num_gru_layers: int = 4,
+    ) -> None:
+        super().__init__()
+
+        # GRU implementation 
+        self.gru_layers = nn.GRU(
+            input_size= num_features,
+            hidden_size= gru_hidden_size,
+            num_layers= num_gru_layers,
+            batch_first=False,  # Input shape: (T, N, num_features)
+            bidirectional=True
+        )
+
+        self.fc_block = TDSFullyConnectedBlock(gru_hidden_size * 2)
+        self.out_layer = nn.Linear(gru_hidden_size * 2, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        x, _ = self.gru_layers(inputs)  # (T, N, lstm_hidden_size * 2)
+        x = self.fc_block(x)  # Apply FC transformation
+        x = self.out_layer(x)
+        return x
+    
+class TDSBatchNorm1dBlock(nn.Module):
+    def __init__(
+        self,
+        num_features: int,
+        eps: float,
+        momentum: float, 
+        affine: bool,
+        track_running_stats: bool,
+    ) -> None:
+        super().__init__()
+
+        self.batch_norm= nn.BatchNorm1d(
+            num_features= num_features,
+            eps= eps,
+            momentum= momentum,
+            affine=affine,  
+            track_running_stats=track_running_stats,
+        )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        x =  inputs.movedim(0, -1) #(N, num_features, T)
+        out = self.batch_norm(x)
+        return out.movedim(-1, 0) #(T, N, num_features)
+
+
+
+# [9] Positional Encoding Pytorch Tutorial (2023) PyTorch Forums. 
+# Available at: https://discuss.pytorch.org/t/positional-encoding/175953 (Accessed: 14 March 2025). 
 class PositionalEncoding(nn.Module):
-    """
-    Add description
-    """ 
+   
     def __init__(self, d_embed : int):  
-        """
-        Add description
-        """ 
+        
         super(). __init__()
         self.d_embed = d_embed
 
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        """
-        Add description
-        """
+        
         temporal_length, N, num_features = input.shape
         device = input.device
         position = torch.arange(temporal_length, dtype=torch.float).reshape(temporal_length, 1)
@@ -309,26 +390,12 @@ class PositionalEncoding(nn.Module):
         pe[:, 0, 1::2] = torch.cos(position * div_term)
 
         pe = pe.expand(-1, N, -1).to(device)
-        #self.register_buffer('pe', pe, persistent=False)
 
         out = input + pe.detach()
-        
-        #even = torch.arange(0, self.d_embed, 2)
-        #denominator = torch.pow(1000, even/self.d_embed)
-        
-        #even_positionalEncoder = torch.sin(self.position / denominator)
-        #odd_positionalEncoder =  torch.cos(self.position / denominator)
-        #pos_encoder = torch.stack([even_positionalEncoder, odd_positionalEncoder], dim = 2)
-        #pos_encoder = torch.flatten(pos_encoder, start_dim = 1, end_dim = 2)
 
         return out.to(device)
 
 class TransformerModel(nn.Module):
-    """
-    Args:
-        input: input is of shape (T, N. num_features)
-        num_features = bands (B=2) x channels (C=16)
-    """
     def __init__(
         self,
         num_layers : int,
@@ -351,52 +418,3 @@ class TransformerModel(nn.Module):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         out = self.transformer_encoder(input)
         return out
-
-
-# Class below used for LSTM and GRU, both implementations down below ; GRU commented out
-class TDSGRUEncoder(nn.Module):
-
-    def __init__(
-        self,
-        num_features: int,
-
-        # gru_hidden_size: int = 128, 
-        # num_gru_layers: int = 4,
-
-        lstm_hidden_size: int = 128,
-        num_lstm_layers: int = 4,
-
-    ) -> None:
-        super().__init__()
-
-        # GRU implementation 
-        # self.gru_layers = nn.GRU(
-        #     input_size= num_features,
-        #     hidden_size= gru_hidden_size,
-        #     num_layers= num_gru_layers,
-        #     batch_first=False,  # Input shape: (T, N, num_features)
-        #     bidirectional=True
-        # )
-        # self.fc_block = TDSFullyConnectedBlock(gru_hidden_size * 2)
-        # self.out_layer = nn.Linear(gru_hidden_size * 2, num_features)
-
-
-       # LSTM implementation 
-        self.lstm_layers = nn.LSTM(
-            input_size=num_features,
-            hidden_size=lstm_hidden_size,
-            num_layers=num_lstm_layers,
-            batch_first=False,  # Input shape: (T, N, num_features)
-            bidirectional=True
-        )
-
-        # Fully connected block (remains the same)
-        self.fc_block = TDSFullyConnectedBlock(lstm_hidden_size * 2)
-        self.out_layer = nn.Linear(lstm_hidden_size * 2, num_features)
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        # x, _ = self.gru_layers(inputs)  # (T, N, gru_hidden_size * 2)
-        x, _ = self.lstm_layers(inputs)  # (T, N, lstm_hidden_size * 2)
-        x = self.fc_block(x)  # Apply FC transformation
-        x = self.out_layer(x)
-        return x
