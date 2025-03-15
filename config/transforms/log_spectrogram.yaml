@@ -26,6 +26,11 @@ logspec:
   _target_: emg2qwerty.transforms.LogSpectrogram
   n_fft: 64
   hop_length: 16  # Downsamples from 2kHz to 125Hz
+  # hop_length: 20  #Downsamples from 2kHz to 100Hz
+  # hop_length: 12  #Downsamples from 2kHz to 166Hz
+  # hop_length: 25  #Downsamples from 2kHz to 80Hz
+  # hop_length: 50  #Downsamples from 2kHz to 40Hz
+  # hop_length: 32  #Downsamples from 2kHz to 62.5Hz
 
 specaug:
   _target_: emg2qwerty.transforms.SpecAugment
