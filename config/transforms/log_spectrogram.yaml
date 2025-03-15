@@ -40,11 +40,10 @@ transforms:
     - ${band_rotation}
     - ${temporal_jitter}
     - ${add_noise}
+   #- ${random_shift}
     - ${logspec}
     - ${specaug}
     
-
-
   val:
     - ${to_tensor}
     - ${logspec}
