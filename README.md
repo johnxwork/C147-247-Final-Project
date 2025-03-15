@@ -2,10 +2,10 @@
 ### Winter 2025 - _Professor Jonathan Kao_ <br>
 
 This is the final project of UCLA EC ENGR 147/247 forked from the instructors and modified by the following students: <br>
-Saienath Poopalarajah: spoopalarajah@g.ucla.edu
-Dhruv Raizada Krishan: dhruvkrishan17@g.ucla.edu
-Zhaowei Xu: johnx@g.ucla.edu
-Vikram Puliyadi: vikram.puliyadi@gmail.com
+Saienath Poopalarajah: spoopalarajah@g.ucla.edu <br>
+Dhruv Raizada Krishan: dhruvkrishan17@g.ucla.edu <br>
+Zhaowei Xu: johnx@g.ucla.edu <br>
+Vikram Puliyadi: vikram.puliyadi@gmail.com <br>
 
 
 <---------------------Below are original course content-------------------------->
